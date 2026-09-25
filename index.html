@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🕊️ Helpful Pigeon — Proxy Local</title>
+<style>
+  :root{
+    --bg:#0d0f1c; --panel:#141830; --panel-2:#1b2040; --border:#2a3057;
+    --accent:#7c6cff; --accent-2:#4dd4c0; --text:#e9eaf6; --muted:#8b90b8;
+    --warn:#ffb84d; --ok:#4dd4c0; --err:#ff6b81; --radius:10px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; font-family:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+    background:radial-gradient(900px 500px at 12% -10%, #2a1f5e 0, transparent 60%),
+               radial-gradient(800px 500px at 100% 0, #10384a 0, transparent 55%), var(--bg);
+    color:var(--text); overflow:hidden;
+  }
+  .app{height:100vh;display:flex;flex-direction:column;padding:10px;gap:8px}
+  .titlebar{display:flex;align-items:center;justify-content:space-between;padding:0 6px;flex-wrap:wrap;gap:6px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px}
+  .brand .pigeon{font-size:22px;filter:drop-shadow(0 0 10px rgba(124,108,255,.8));animation:bob 3s ease-in-out infinite}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+  .brand .grad{background:linear-gradient(90deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hint{font-size:11px;color:var(--muted)}
+
+  .toolbar{display:flex;align-items:center;gap:6px;background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--border);border-radius:var(--radius);padding:8px;box-shadow:0 8px 26px rgba(0,0,0,.45);flex-wrap:wrap}
+  button.nav{width:36px;height:36px;display:grid;place-items:center;background:#20264a;border:1px solid var(--border);color:var(--text);border-radius:8px;cursor:pointer;font-size:16px;transition:.15s;flex:0 0 auto}
+  button.nav:hover:not(:disabled){background:#2c3466;border-color:var(--accent)}
+  button.nav:disabled{opacity:.35;cursor:not-allowed}
+
+  .omnibox{flex:1 1 240px;display:flex;align-items:center;gap:8px;background:#0c0f22;border:1px solid var(--border);border-radius:8px;padding:0 12px;height:36px;transition:.2s;min-width:160px}
+  .omnibox:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(124,108,255,.18)}
+  .omnibox .lock{font-size:12px;opacity:.7}
+  .omnibox input{flex:1;background:transparent;border:0;outline:0;color:var(--text);font-size:14px;font-family:inherit;min-width:0}
+  .omnibox input::placeholder{color:#5b6088}
+
+  button.go{height:36px;padding:0 16px;border:0;border-radius:8px;background:linear-gradient(135deg,var(--accent),#5a4bff);color:#fff;font-weight:700;font-size:13px;cursor:pointer;transition:.15s;box-shadow:0 4px 14px rgba(124,108,255,.35)}
+  button.go:hover{filter:brightness(1.12)}
+  button.go.alt{background:linear-gradient(135deg,#4a3fbf,#2f2775);box-shadow:0 4px 14px rgba(74,63,191,.35)}
+
+  .cfg{display:none;background:#0c0f22;border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;gap:8px;flex-direction:column}
+  .cfg.open{display:flex}
+  .cfg label{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:600}
+  .cfg-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .cfg input[type="text"]{flex:1;min-width:240px;height:34px;background:#0a0c18;border:1px solid var(--border);border-radius:7px;color:var(--text);padding:0 10px;font-family:"SFMono-Regular",Consolas,monospace;font-size:12.5px;outline:none}
+  .cfg input[type="text"]:focus{border-color:var(--accent)}
+  .cfg .save{padding:8px 16px;border:0;border-radius:7px;background:var(--accent-2);color:#062018;font-weight:700;cursor:pointer;font-size:12.5px}
+  .cfg .hintline{font-size:11px;color:var(--muted);margin-top:2px}
+  .cfg .hintline code{background:#1b2040;border:1px solid var(--border);padding:1px 5px;border-radius:4px;color:var(--accent-2);font-size:11px}
+
+  .progress{height:3px;border-radius:3px;overflow:hidden;background:transparent;position:relative;flex:0 0 auto}
+  .progress.on::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,var(--accent),var(--accent-2),transparent);animation:slide 1.1s linear infinite}
+  @keyframes slide{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+
+  .viewport{flex:1 1 auto;position:relative;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:#0a0c18;box-shadow:0 12px 40px rgba(0,0,0,.5);min-height:0}
+  #view{width:100%;height:100%;border:0;display:none;background:#fff}
+
+  #loading{display:none;position:absolute;inset:0;align-items:center;justify-content:center;flex-direction:column;gap:14px;background:#0a0c18;color:var(--muted);font-size:14px;z-index:5;text-align:center;padding:20px}
+  #loading .spinner{width:42px;height:42px;border:4px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  #error-view{display:none;position:absolute;inset:0;padding:32px;overflow:auto;background:#0a0c18;text-align:center;align-items:center;justify-content:center;flex-direction:column;gap:14px}
+  #error-view .ico{font-size:56px}
+  #error-view h2{margin:0;font-size:22px;color:var(--err)}
+  #error-view p{color:var(--muted);max-width:600px;line-height:1.7;font-size:14px;margin:6px 0}
+  #error-view code{background:#1b2040;border:1px solid var(--border);padding:3px 8px;border-radius:6px;font-size:12px;color:var(--accent-2);word-break:break-all}
+  #error-view .btns{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:8px}
+  #error-view button{padding:10px 18px;border:0;border-radius:8px;background:var(--accent);color:#fff;font-weight:700;cursor:pointer;font-size:13px}
+  #error-view button.sec{background:#20264a;border:1px solid var(--border)}
+
+  .home{position:absolute;inset:0;overflow:auto;padding:38px 26px 40px;display:flex;flex-direction:column;align-items:center;text-align:center;background:radial-gradient(600px 300px at 50% 0, rgba(124,108,255,.18), transparent 70%),#0a0c18}
+  .home h1{margin:6px 0;font-size:clamp(28px,4.6vw,46px)}
+  .home h1 span{background:linear-gradient(90deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .home p.sub{margin:0 0 26px;color:var(--muted);max-width:620px;line-height:1.6;font-size:14px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;width:100%;max-width:820px}
+  .card{background:linear-gradient(180deg,#161a33,#121529);border:1px solid var(--border);border-radius:12px;padding:16px 12px;cursor:pointer;transition:.18s;text-align:center;color:var(--text);font-family:inherit;font-size:13px;font-weight:600}
+  .card:hover{border-color:var(--accent);transform:translateY(-3px)}
+  .card .ico{font-size:24px;display:block;margin-bottom:8px}
+  .card small{display:block;font-weight:400;color:var(--muted);font-size:11px;margin-top:3px}
+
+  .notice{margin-top:28px;max-width:760px;font-size:12px;color:var(--muted);line-height:1.7;border:1px dashed var(--border);border-radius:10px;padding:14px 18px;text-align:left}
+  .notice b{color:var(--text)}
+  .notice .warn{color:var(--warn)}
+  .notice .ok{color:var(--ok)}
+  .notice code{background:#1b2040;border:1px solid var(--border);padding:1px 5px;border-radius:4px;color:var(--accent-2);font-size:11px}
+
+  .statusbar{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:11.5px;color:var(--muted);padding:0 6px;height:18px;flex:0 0 auto}
+  #status{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #stats{white-space:nowrap;font-variant-numeric:tabular-nums;font-family:"SFMono-Regular",Consolas,monospace}
+  #status.ok{color:var(--ok)} #status.err{color:var(--err)} #status.warn{color:var(--warn)}
+
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-track{background:#0a0c18}
+  ::-webkit-scrollbar-thumb{background:#2c3360;border-radius:8px;border:3px solid #0a0c18}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="titlebar">
+    <div class="brand">
+      <span class="pigeon">🕊️</span>
+      <span class="grad">Helpful Pigeon</span>
+    </div>
+    <div class="hint">Ctrl+L endereço · Enter navegar · Alt+← voltar · ⚙️ configurar proxy</div>
+  </div>
+
+  <div class="toolbar">
+    <button class="nav" id="back"    title="Voltar">←</button>
+    <button class="nav" id="forward" title="Avançar" disabled>→</button>
+    <button class="nav" id="reload"  title="Recarregar">⟳</button>
+    <button class="nav" id="home"    title="Página inicial">⌂</button>
+
+    <form class="omnibox" id="nav-form" autocomplete="off">
+      <span class="lock" id="lock">🔒</span>
+      <input id="address" type="text" spellcheck="false"
+             placeholder="Digite um endereço ou pesquise…">
+    </form>
+
+    <button class="go" id="go">IR</button>
+    <button class="go alt" id="cfgBtn" title="Configurar proxy">⚙️</button>
+  </div>
+
+  <div class="cfg" id="cfgPanel">
+    <label>URL do proxy (usa <code>{url}</code> como placeholder)</label>
+    <div class="cfg-row">
+      <input type="text" id="proxyUrl" spellcheck="false"
+             placeholder="/proxy?token=meu-segredo-super-longo&url={url}">
+      <button class="save" id="cfgSave">Guardar</button>
+      <button class="save" id="cfgReset" style="background:#20264a;color:var(--text)">Reset</button>
+    </div>
+    <div class="hintline">
+      Padrão: <code>/proxy?token=meu-segredo-super-longo&amp;url={url}</code>
+    </div>
+  </div>
+
+  <div class="progress" id="progress"></div>
+
+  <div class="viewport">
+    <div class="home" id="home-view">
+      <h1><span>Helpful Pigeon</span> 🕊️</h1>
+      <p class="sub">
+        Navega através do <b>teu proxy local</b>.
+        Sites que bloqueiam iframe (Google, YouTube, Facebook) são
+        <b>pré-processados</b> para contornar o bloqueio.
+      </p>
+
+      <div class="cards" id="cards"></div>
+
+      <div class="notice">
+        <b class="ok">✅ Como funciona:</b>
+        <ul style="margin:6px 0 10px 18px;padding:0">
+          <li><b>Sites normais</b> → iframe direto via proxy (JS corre normalmente)</li>
+          <li><b>Sites que bloqueiam iframe</b> (Google, YouTube, Facebook, X, Amazon) → HTML é buscado, limpo de bloqueios e injetado via <code>srcdoc</code></li>
+        </ul>
+        <b class="warn">⚠️ O teu proxy TEM de remover estes headers:</b>
+        <code>X-Frame-Options</code> e <code>Content-Security-Policy</code>.
+      </div>
+    </div>
+
+    <div id="loading">
+      <div class="spinner"></div>
+      <div id="loading-text">Carregando…</div>
+    </div>
+
+    <div id="error-view">
+      <div class="ico" id="err-ico">🔐</div>
+      <h2 id="err-title">Não foi possível carregar</h2>
+      <p id="err-detail"></p>
+      <p><code id="err-url"></code></p>
+      <div class="btns">
+        <button id="err-cfg">⚙️ Configurar proxy</button>
+        <button id="err-home" class="sec">⌂ Início</button>
+      </div>
+    </div>
+
+    <iframe id="view"
+      sandbox="allow-scripts allow-forms allow-popups allow-modals allow-pointer-lock allow-presentation"
+      referrerpolicy="no-referrer"></iframe>
+  </div>
+
+  <div class="statusbar">
+    <span id="status">Pronto para voar.</span>
+    <span id="stats"></span>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* =========================================================
+     PROXY  —  agora RELATIVO, para funcionar via ngrok/Tailscale
+     ========================================================= */
+  const DEFAULT_PROXY = "/proxy?token=meu-segredo-super-longo&url={url}";
+  const STORAGE_KEY = "helpful-pigeon-proxy-url";
+  let proxyTemplate = localStorage.getItem(STORAGE_KEY) || DEFAULT_PROXY;
+
+  function buildProxyUrl(targetUrl){
+    const encoded = encodeURIComponent(targetUrl);
+    if (proxyTemplate.indexOf("{url}") !== -1){
+      return proxyTemplate.replace(/\{url\}/g, encoded);
+    }
+    return proxyTemplate + encoded;
+  }
+  function maskProxy(url){
+    return url.replace(/token=([^&]+)/, (m, t) =>
+      "token=" + (t.length > 8 ? t.slice(0,4) + "…" + t.slice(-3) : "***"));
+  }
+
+  /* =========================================================
+     HOSTS QUE BLOQUEIAM IFRAME
+     ========================================================= */
+  const IFRAME_BLOCKERS = [
+    "google.com", "www.google.com",
+    "google.com.br", "www.google.com.br",
+    "google.pt", "www.google.pt",
+    "youtube.com", "www.youtube.com", "youtu.be",
+    "gmail.com", "mail.google.com",
+    "facebook.com", "www.facebook.com", "m.facebook.com",
+    "instagram.com", "www.instagram.com",
+    "twitter.com", "x.com", "www.twitter.com",
+    "amazon.com", "www.amazon.com", "amazon.com.br",
+    "netflix.com", "www.netflix.com",
+    "linkedin.com", "www.linkedin.com",
+    "reddit.com", "www.reddit.com",
+    "whatsapp.com", "web.whatsapp.com",
+    "tiktok.com", "www.tiktok.com",
+    "pinterest.com", "www.pinterest.com",
+    "bing.com", "www.bing.com",
+    "yahoo.com", "www.yahoo.com"
+  ];
+
+  function needsSrcdoc(url){
+    try {
+      const h = new URL(url).hostname.toLowerCase();
+      return IFRAME_BLOCKERS.some(b => h === b || h.endsWith("." + b));
+    } catch(e){ return false; }
+  }
+
+  /* =========================================================
+     ESTADO
+     ========================================================= */
+  const state = { stack: [], index: -1, current: null, busy: false };
+  let globalLoadTimer = null;
+
+  /* =========================================================
+     DOM
+     ========================================================= */
+  const $ = id => document.getElementById(id);
+  const view      = $("view");
+  const homeEl    = $("home-view");
+  const loading   = $("loading");
+  const loadingTx = $("loading-text");
+  const errorView = $("error-view");
+  const errIco    = $("err-ico");
+  const errTitle  = $("err-title");
+  const errDetail = $("err-detail");
+  const errUrl    = $("err-url");
+  const address   = $("address");
+  const form      = $("nav-form");
+  const btnBack   = $("back");
+  const btnFwd    = $("forward");
+  const btnReload = $("reload");
+  const btnHome   = $("home");
+  const progress  = $("progress");
+  const statusEl  = $("status");
+  const statsEl   = $("stats");
+  const lockEl    = $("lock");
+  const cfgPanel  = $("cfgPanel");
+  const cfgBtn    = $("cfgBtn");
+  const proxyIn   = $("proxyUrl");
+  const cfgSave   = $("cfgSave");
+  const cfgReset  = $("cfgReset");
+
+  /* =========================================================
+     ATALHOS
+     ========================================================= */
+  const SHORTCUTS = [
+    { ico:"🦆", name:"DuckDuckGo", sub:"busca",         url:"https://duckduckgo.com" },
+    { ico:"📚", name:"Wikipedia",  sub:"enciclopédia",  url:"https://pt.wikipedia.org" },
+    { ico:"📰", name:"Hacker News",sub:"tech news",     url:"https://news.ycombinator.com" },
+    { ico:"🐙", name:"GitHub",     sub:"código",        url:"https://github.com" },
+    { ico:"🎮", name:"Poki",       sub:"jogos",         url:"https://poki.com" },
+    { ico:"👾", name:"itch.io",    sub:"jogos indie",   url:"https://itch.io" },
+    { ico:"🧪", name:"HTTPBin",    sub:"testes de API", url:"https://httpbin.org" },
+    { ico:"🌐", name:"Example.com",sub:"teste",         url:"https://example.com" }
+  ];
+
+  function buildCards(){
+    const wrap = $("cards");
+    wrap.innerHTML = "";
+    SHORTCUTS.forEach(s => {
+      const b = document.createElement("button");
+      b.className = "card"; b.type = "button";
+      b.innerHTML = '<span class="ico">' + s.ico + '</span>' + s.name +
+                    '<small>' + s.sub + '</small>';
+      b.addEventListener("click", () => navigate(s.url));
+      wrap.appendChild(b);
+    });
+  }
+
+  /* =========================================================
+     UTILITÁRIOS
+     ========================================================= */
+  function setStatus(t, cls){ statusEl.textContent = t; statusEl.className = cls || ""; }
+  function setStats(t){ statsEl.textContent = t || ""; }
+  function showProgress(on){ progress.classList.toggle("on", !!on); }
+
+  function normalize(input){
+    let s = String(input || "").trim();
+    if (!s) return null;
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return s;
+    if (/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(s)) return "http://" + s;
+    if (/^[^\s]+\.[a-z]{2,}(:\d+)?(\/.*)?$/i.test(s) && !/\s/.test(s)) return "https://" + s;
+    return "https://duckduckgo.com/?q=" + encodeURIComponent(s);
+  }
+  const hostOf = url => { try { return new URL(url).hostname; } catch(e){ return url; } };
+
+  function showPane(which){
+    homeEl.style.display    = which === "home"    ? "flex"  : "none";
+    loading.style.display   = which === "loading" ? "flex"  : "none";
+    errorView.style.display = which === "error"   ? "flex"  : "none";
+    view.style.display      = which === "view"    ? "block" : "none";
+  }
+
+  function updateLock(url){
+    try {
+      const u = new URL(url);
+      lockEl.textContent = u.protocol === "https:" ? "🔒" : "🔓";
+    } catch(e){ lockEl.textContent = "🌐"; }
+  }
+
+  /* =========================================================
+     REESCRITA DO HTML
+     ========================================================= */
+  function rewriteHTML(html, baseUrl){
+    let out = String(html);
+
+    out = out.replace(/<meta[^>]+http-equiv=["']?X-Frame-Options["']?[^>]*>/gi, "");
+    out = out.replace(/<meta[^>]+http-equiv=["']?Content-Security-Policy["']?[^>]*>/gi, "");
+    out = out.replace(/<meta[^>]+http-equiv=["']?content-security-policy["']?[^>]*>/gi, "");
+    out = out.replace(/<base\b[^>]*>/gi, "");
+
+    const baseTag = '<base href="' + baseUrl.replace(/"/g, "&quot;") + '">';
+    if (/<head[^>]*>/i.test(out)) out = out.replace(/<head[^>]*>/i, m => m + baseTag);
+    else if (/<html[^>]*>/i.test(out)) out = out.replace(/<html[^>]*>/i, m => m + "<head>" + baseTag + "</head>");
+    else out = "<head>" + baseTag + "</head>" + out;
+
+    const hook = "<scr" + "ipt>(function(){" +
+      "function send(u){try{parent.postMessage({__hp:1,type:'navigate',url:u},'*');}catch(e){}}" +
+      "document.addEventListener('click',function(e){" +
+      "if(e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;" +
+      "var el=e.target;while(el&&el.tagName!=='A')el=el.parentElement;" +
+      "if(!el)return;if(el.hasAttribute('download'))return;" +
+      "var t=el.getAttribute('target');if(t&&t!=='_self')return;" +
+      "var href=el.getAttribute('href');if(!href)return;" +
+      "var low=href.toLowerCase();" +
+      "if(low.indexOf('javascript:')===0||low.indexOf('#')===0||low.indexOf('mailto:')===0||low.indexOf('tel:')===0)return;" +
+      "e.preventDefault();try{send(el.href);}catch(err){}}" +
+      ",true);" +
+      "document.addEventListener('submit',function(e){" +
+      "var f=e.target;if(!f||f.tagName!=='FORM')return;" +
+      "var m=(f.getAttribute('method')||'get').toLowerCase();" +
+      "if(m!=='get')return;" +
+      "e.preventDefault();" +
+      "try{var u=new URL(f.getAttribute('action')||document.baseURI,document.baseURI);" +
+      "var fd=new FormData(f);fd.forEach(function(v,k){u.searchParams.set(k,v);});" +
+      "send(u.href);}catch(err){}}" +
+      ",true);" +
+      "document.addEventListener('keydown',function(e){" +
+      "var c=e.ctrlKey||e.metaKey;" +
+      "if(c&&(e.key==='l'||e.key==='L')){e.preventDefault();" +
+      "try{parent.postMessage({__hp:1,type:'focus-address'},'*');}catch(err){}}" +
+      "},true);" +
+      "})();</scr" + "ipt>";
+
+    if (/<\/body>/i.test(out)) out = out.replace(/<\/body>/i, hook + "</body>");
+    else out += hook;
+
+    return out;
+  }
+
+  /* =========================================================
+     NAVEGAÇÃO
+     ========================================================= */
+  function navigate(rawUrl){
+    const url = normalize(rawUrl);
+    if (!url) return;
+    address.value = url;
+    state.current = url;
+    state.stack = state.stack.slice(0, state.index + 1);
+    state.stack.push(url);
+    state.index = state.stack.length - 1;
+    updateNav();
+    load(url);
+  }
+
+  function updateNav(){
+    btnBack.disabled = state.index <= 0;
+    btnFwd.disabled  = state.index >= state.stack.length - 1;
+  }
+
+  /* =========================================================
+     CARREGAMENTO
+     ========================================================= */
+  function load(url){
+    if (globalLoadTimer){ clearTimeout(globalLoadTimer); globalLoadTimer = null; }
+
+    state.busy = true;
+    showProgress(true);
+    setStats("");
+    updateLock(url);
+
+    const finalUrl = buildProxyUrl(url);
+    const useSrcdoc = needsSrcdoc(url);
+
+    if (useSrcdoc){
+      setStatus("Sites que bloqueiam iframe — a pré-processar…", "warn");
+      loadingTx.textContent = "Processando " + hostOf(url) + "…";
+    } else {
+      setStatus("Carregando via proxy…");
+      loadingTx.textContent = "Carregando " + hostOf(url) + "…";
+    }
+    showPane("loading");
+    setStats("→ " + maskProxy(finalUrl));
+
+    if (useSrcdoc){
+      loadViaSrcdoc(url, finalUrl);
+    } else {
+      loadInIframe(url, finalUrl);
+    }
+  }
+
+  function loadInIframe(targetUrl, finalUrl){
+    view.setAttribute("sandbox",
+      "allow-scripts allow-forms allow-popups allow-modals allow-pointer-lock allow-presentation");
+    view.removeAttribute("srcdoc");
+    view.removeAttribute("src");
+    showPane("view");
+
+    const t0 = performance.now();
+    let settled = false;
+
+    const onLoad = () => {
+      if (settled) return;
+      settled = true;
+      view.removeEventListener("load", onLoad);
+      if (globalLoadTimer){ clearTimeout(globalLoadTimer); globalLoadTimer = null; }
+      const dt = Math.round(performance.now() - t0);
+      setStatus("Carregado — " + hostOf(targetUrl), "ok");
+      setStats(dt + " ms · iframe · " + maskProxy(finalUrl));
+      showProgress(false);
+      state.busy = false;
+    };
+    view.addEventListener("load", onLoad);
+    view.src = finalUrl;
+
+    globalLoadTimer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      view.removeEventListener("load", onLoad);
+      setStatus("Timeout — verifica o proxy em ⚙️", "err");
+      showProgress(false);
+      state.busy = false;
+    }, 25000);
+  }
+
+  async function loadViaSrcdoc(targetUrl, finalUrl){
+    try {
+      setStatus("Buscando HTML via proxy…", "warn");
+      const ctl = new AbortController();
+      const tid = setTimeout(() => ctl.abort(), 20000);
+      const res = await fetch(finalUrl, { signal: ctl.signal, mode: "cors" });
+      clearTimeout(tid);
+
+      if (!res.ok){
+        if (res.status === 401 || res.status === 403){
+          showError(targetUrl, "O proxy devolveu HTTP " + res.status + ".", "🔐");
+          return;
+        }
+        throw new Error("HTTP " + res.status);
+      }
+
+      let html = await res.text();
+      const low = html.slice(0, 400).toLowerCase();
+      if (low.indexOf("token inválido") !== -1 || low.indexOf("invalid token") !== -1){
+        showError(targetUrl, "O proxy rejeitou o token.", "🔐");
+        return;
+      }
+
+      html = rewriteHTML(html, targetUrl);
+
+      view.setAttribute("sandbox",
+        "allow-scripts allow-forms allow-modals allow-pointer-lock allow-presentation");
+      view.removeAttribute("src");
+      view.srcdoc = html;
+      showPane("view");
+
+      if (globalLoadTimer){ clearTimeout(globalLoadTimer); globalLoadTimer = null; }
+      setStatus("Processado — " + hostOf(targetUrl), "ok");
+      setStats("srcdoc · " + maskProxy(finalUrl));
+      showProgress(false);
+      state.busy = false;
+    } catch(err){
+      if (err.name === "AbortError"){
+        showError(targetUrl, "Timeout ao buscar o HTML do proxy.", "⏱️");
+        return;
+      }
+      showError(targetUrl, err.message || String(err), "⚠️");
+    }
+  }
+
+  /* =========================================================
+     ERRO
+     ========================================================= */
+  function showError(url, detail, icon){
+    if (globalLoadTimer){ clearTimeout(globalLoadTimer); globalLoadTimer = null; }
+    state.busy = false;
+    showProgress(false);
+
+    errIco.textContent = icon || "⚠️";
+    errTitle.textContent = "Não foi possível carregar";
+    errDetail.textContent = detail + " Verifica o token em ⚙️ ou tenta outro site.";
+    errUrl.textContent = url;
+
+    view.removeAttribute("srcdoc");
+    view.removeAttribute("src");
+    showPane("error");
+    setStatus("Erro — vê detalhes na tela", "err");
+    setStats("");
+  }
+
+  /* =========================================================
+     CONFIGURAÇÃO
+     ========================================================= */
+  function openCfg(){
+    cfgPanel.classList.add("open");
+    proxyIn.value = proxyTemplate;
+    proxyIn.focus();
+    proxyIn.select();
+  }
+  cfgBtn.addEventListener("click", () => {
+    if (cfgPanel.classList.contains("open")) cfgPanel.classList.remove("open");
+    else openCfg();
+  });
+
+  cfgSave.addEventListener("click", () => {
+    const v = proxyIn.value.trim();
+    if (!v) return;
+    if (v.indexOf("{url}") === -1){
+      setStatus("O URL do proxy tem de conter {url}", "err");
+      return;
+    }
+    proxyTemplate = v;
+    localStorage.setItem(STORAGE_KEY, v);
+    setStatus("Proxy guardado: " + maskProxy(v), "ok");
+    cfgPanel.classList.remove("open");
+    if (state.current) load(state.current);
+  });
+
+  cfgReset.addEventListener("click", () => {
+    proxyTemplate = DEFAULT_PROXY;
+    localStorage.removeItem(STORAGE_KEY);
+    proxyIn.value = DEFAULT_PROXY;
+    setStatus("Proxy reposto ao padrão.");
+  });
+
+  $("err-cfg").addEventListener("click", () => { openCfg(); });
+  $("err-home").addEventListener("click", goHome);
+
+  /* =========================================================
+     EVENTOS
+     ========================================================= */
+  form.addEventListener("submit", e => { e.preventDefault(); navigate(address.value); });
+  $("go").addEventListener("click", () => navigate(address.value));
+
+  btnBack.addEventListener("click", () => {
+    if (state.index > 0){
+      state.index--;
+      const url = state.stack[state.index];
+      address.value = url; state.current = url;
+      updateNav(); load(url);
+    }
+  });
+  btnFwd.addEventListener("click", () => {
+    if (state.index < state.stack.length - 1){
+      state.index++;
+      const url = state.stack[state.index];
+      address.value = url; state.current = url;
+      updateNav(); load(url);
+    }
+  });
+  btnReload.addEventListener("click", () => { if (state.current) load(state.current); });
+  btnHome.addEventListener("click", goHome);
+
+  function goHome(){
+    if (globalLoadTimer){ clearTimeout(globalLoadTimer); globalLoadTimer = null; }
+    state.busy = false;
+    showPane("home");
+    address.value = ""; state.current = null;
+    setStatus("Página inicial do Helpful Pigeon.");
+    setStats("");
+    lockEl.textContent = "🏠";
+    view.removeAttribute("srcdoc");
+    view.removeAttribute("src");
+  }
+
+  document.addEventListener("keydown", e => {
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (ctrl && e.key.toLowerCase() === "l"){ e.preventDefault(); address.focus(); address.select(); }
+    if (e.key === "F5" || (ctrl && e.key.toLowerCase() === "r")){
+      if (e.shiftKey || !state.current) return;
+      e.preventDefault(); load(state.current);
+    }
+    if (e.altKey && e.key === "ArrowLeft"){ e.preventDefault(); btnBack.click(); }
+    if (e.altKey && e.key === "ArrowRight"){ e.preventDefault(); btnFwd.click(); }
+    if (e.key === "Escape" && document.activeElement === address) address.blur();
+  });
+
+  window.addEventListener("message", e => {
+    if (e.source !== view.contentWindow) return;
+    const d = e.data;
+    if (d && d.__hp === 1){
+      if (d.type === "navigate" && typeof d.url === "string") navigate(d.url);
+      else if (d.type === "focus-address"){ address.focus(); address.select(); }
+    }
+  });
+
+  /* =========================================================
+     INIT
+     ========================================================= */
+  buildCards();
+  showPane("home");
+  updateNav();
+  setStatus("Pronto. Proxy: " + maskProxy(proxyTemplate), "ok");
+  lockEl.textContent = "🏠";
+  proxyIn.value = proxyTemplate;
+
+  setTimeout(() => address.focus(), 120);
+
+})();
+</script>
+</body>
+</html>
