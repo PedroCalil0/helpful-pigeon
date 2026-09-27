@@ -144,17 +144,16 @@
       <h1><span>Helpful Pigeon</span> 🕊️</h1>
       <p class="sub">
         Navega através do <b>teu proxy local</b>.
-        Sites que bloqueiam iframe (Google, YouTube, Facebook) são
-        <b>pré-processados</b> para contornar o bloqueio.
+        Tudo passa por <code>srcdoc</code> para que o URL da barra acompanhe os cliques.
       </p>
 
       <div class="cards" id="cards"></div>
 
       <div class="notice">
-        <b class="ok">✅ Como funciona:</b>
+        <b class="ok">✅ Como funciona agora:</b>
         <ul style="margin:6px 0 10px 18px;padding:0">
-          <li><b>Sites normais</b> → iframe direto via proxy (JS corre normalmente)</li>
-          <li><b>Sites que bloqueiam iframe</b> (Google, YouTube, Facebook, X, Amazon) → HTML é buscado, limpo de bloqueios e injetado via <code>srcdoc</code></li>
+          <li><b>Todos os sites</b> → HTML via proxy, limpo de bloqueios, injetado em <code>srcdoc</code></li>
+          <li><b>Cliques, formulários e SPAs</b> (<code>pushState</code>) → atualizam a barra de endereços</li>
         </ul>
         <b class="warn">⚠️ O teu proxy TEM de remover estes headers:</b>
         <code>X-Frame-Options</code> e <code>Content-Security-Policy</code>.
@@ -178,7 +177,7 @@
     </div>
 
     <iframe id="view"
-      sandbox="allow-scripts allow-forms allow-popups allow-modals allow-pointer-lock allow-presentation"
+      sandbox="allow-scripts allow-forms allow-modals allow-pointer-lock allow-presentation"
       referrerpolicy="no-referrer"></iframe>
   </div>
 
@@ -193,7 +192,7 @@
   "use strict";
 
   /* =========================================================
-     PROXY — relativo, funciona via ngrok / qualquer domínio
+     PROXY
      ========================================================= */
   const DEFAULT_PROXY = "/proxy?token=meu-segredo-super-longo&url={url}";
   const STORAGE_KEY = "helpful-pigeon-proxy-url";
@@ -209,36 +208,6 @@
   function maskProxy(url){
     return url.replace(/token=([^&]+)/, (m, t) =>
       "token=" + (t.length > 8 ? t.slice(0,4) + "…" + t.slice(-3) : "***"));
-  }
-
-  /* =========================================================
-     HOSTS QUE BLOQUEIAM IFRAME
-     ========================================================= */
-  const IFRAME_BLOCKERS = [
-    "google.com", "www.google.com",
-    "google.com.br", "www.google.com.br",
-    "google.pt", "www.google.pt",
-    "youtube.com", "www.youtube.com", "youtu.be",
-    "gmail.com", "mail.google.com",
-    "facebook.com", "www.facebook.com", "m.facebook.com",
-    "instagram.com", "www.instagram.com",
-    "twitter.com", "x.com", "www.twitter.com",
-    "amazon.com", "www.amazon.com", "amazon.com.br",
-    "netflix.com", "www.netflix.com",
-    "linkedin.com", "www.linkedin.com",
-    "reddit.com", "www.reddit.com",
-    "whatsapp.com", "web.whatsapp.com",
-    "tiktok.com", "www.tiktok.com",
-    "pinterest.com", "www.pinterest.com",
-    "bing.com", "www.bing.com",
-    "yahoo.com", "www.yahoo.com"
-  ];
-
-  function needsSrcdoc(url){
-    try {
-      const h = new URL(url).hostname.toLowerCase();
-      return IFRAME_BLOCKERS.some(b => h === b || h.endsWith("." + b));
-    } catch(e){ return false; }
   }
 
   /* =========================================================
@@ -335,6 +304,53 @@
   }
 
   /* =========================================================
+     HOOK A INJETAR DENTRO DO IFRAME
+     ========================================================= */
+  const HOOK_JS = [
+    "(function(){",
+      "if(window.__hpInstalled)return;window.__hpInstalled=true;",
+      "function send(u){try{parent.postMessage({__hp:1,type:'navigate',url:u},'*');}catch(e){}}",
+      "function currentUrl(){try{return document.baseURI||location.href;}catch(e){return location.href;}}",
+
+      "document.addEventListener('click',function(e){",
+        "if(e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;",
+        "var el=e.target;while(el&&el.tagName!=='A')el=el.parentElement;",
+        "if(!el)return;if(el.hasAttribute('download'))return;",
+        "var t=el.getAttribute('target');if(t&&t!=='_self')return;",
+        "var href=el.getAttribute('href');if(!href)return;",
+        "var low=href.toLowerCase();",
+        "if(low.indexOf('javascript:')===0||low.indexOf('#')===0||low.indexOf('mailto:')===0||low.indexOf('tel:')===0)return;",
+        "e.preventDefault();try{send(el.href);}catch(err){}}",
+      ",true);",
+
+      "document.addEventListener('submit',function(e){",
+        "var f=e.target;if(!f||f.tagName!=='FORM')return;",
+        "var m=(f.getAttribute('method')||'get').toLowerCase();",
+        "if(m!=='get')return;",
+        "e.preventDefault();",
+        "try{var u=new URL(f.getAttribute('action')||currentUrl(),currentUrl());",
+        "var fd=new FormData(f);fd.forEach(function(v,k){u.searchParams.set(k,v);});",
+        "send(u.href);}catch(err){}}",
+      ",true);",
+
+      "try{",
+        "var _p=history.pushState,_r=history.replaceState;",
+        "history.pushState=function(s,t,u){_p.apply(this,arguments);try{if(u)send(new URL(u,currentUrl()).href);else send(currentUrl());}catch(e){}};",
+        "history.replaceState=function(s,t,u){_r.apply(this,arguments);try{if(u)send(new URL(u,currentUrl()).href);else send(currentUrl());}catch(e){}};",
+      "}catch(e){}",
+
+      "window.addEventListener('popstate',function(){try{send(currentUrl());}catch(e){}});",
+      "window.addEventListener('hashchange',function(){try{send(currentUrl());}catch(e){}});",
+
+      "document.addEventListener('keydown',function(e){",
+        "var c=e.ctrlKey||e.metaKey;",
+        "if(c&&(e.key==='l'||e.key==='L')){e.preventDefault();",
+        "try{parent.postMessage({__hp:1,type:'focus-address'},'*');}catch(err){}}",
+      "},true);",
+    "})();"
+  ].join("");
+
+  /* =========================================================
      REESCRITA DO HTML
      ========================================================= */
   function rewriteHTML(html, baseUrl){
@@ -342,7 +358,6 @@
 
     out = out.replace(/<meta[^>]+http-equiv=["']?X-Frame-Options["']?[^>]*>/gi, "");
     out = out.replace(/<meta[^>]+http-equiv=["']?Content-Security-Policy["']?[^>]*>/gi, "");
-    out = out.replace(/<meta[^>]+http-equiv=["']?content-security-policy["']?[^>]*>/gi, "");
     out = out.replace(/<base\b[^>]*>/gi, "");
 
     const baseTag = '<base href="' + baseUrl.replace(/"/g, "&quot;") + '">';
@@ -350,34 +365,7 @@
     else if (/<html[^>]*>/i.test(out)) out = out.replace(/<html[^>]*>/i, m => m + "<head>" + baseTag + "</head>");
     else out = "<head>" + baseTag + "</head>" + out;
 
-    const hook = "<scr" + "ipt>(function(){" +
-      "function send(u){try{parent.postMessage({__hp:1,type:'navigate',url:u},'*');}catch(e){}}" +
-      "document.addEventListener('click',function(e){" +
-      "if(e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;" +
-      "var el=e.target;while(el&&el.tagName!=='A')el=el.parentElement;" +
-      "if(!el)return;if(el.hasAttribute('download'))return;" +
-      "var t=el.getAttribute('target');if(t&&t!=='_self')return;" +
-      "var href=el.getAttribute('href');if(!href)return;" +
-      "var low=href.toLowerCase();" +
-      "if(low.indexOf('javascript:')===0||low.indexOf('#')===0||low.indexOf('mailto:')===0||low.indexOf('tel:')===0)return;" +
-      "e.preventDefault();try{send(el.href);}catch(err){}}" +
-      ",true);" +
-      "document.addEventListener('submit',function(e){" +
-      "var f=e.target;if(!f||f.tagName!=='FORM')return;" +
-      "var m=(f.getAttribute('method')||'get').toLowerCase();" +
-      "if(m!=='get')return;" +
-      "e.preventDefault();" +
-      "try{var u=new URL(f.getAttribute('action')||document.baseURI,document.baseURI);" +
-      "var fd=new FormData(f);fd.forEach(function(v,k){u.searchParams.set(k,v);});" +
-      "send(u.href);}catch(err){}}" +
-      ",true);" +
-      "document.addEventListener('keydown',function(e){" +
-      "var c=e.ctrlKey||e.metaKey;" +
-      "if(c&&(e.key==='l'||e.key==='L')){e.preventDefault();" +
-      "try{parent.postMessage({__hp:1,type:'focus-address'},'*');}catch(err){}}" +
-      "},true);" +
-      "})();</scr" + "ipt>";
-
+    const hook = "<scr" + "ipt>" + HOOK_JS + "</scr" + "ipt>";
     if (/<\/body>/i.test(out)) out = out.replace(/<\/body>/i, hook + "</body>");
     else out += hook;
 
@@ -405,7 +393,7 @@
   }
 
   /* =========================================================
-     CARREGAMENTO
+     CARREGAMENTO — sempre via srcdoc
      ========================================================= */
   function load(url){
     if (globalLoadTimer){ clearTimeout(globalLoadTimer); globalLoadTimer = null; }
@@ -416,62 +404,16 @@
     updateLock(url);
 
     const finalUrl = buildProxyUrl(url);
-    const useSrcdoc = needsSrcdoc(url);
-
-    if (useSrcdoc){
-      setStatus("Sites que bloqueiam iframe — a pré-processar…", "warn");
-      loadingTx.textContent = "Processando " + hostOf(url) + "…";
-    } else {
-      setStatus("Carregando via proxy…");
-      loadingTx.textContent = "Carregando " + hostOf(url) + "…";
-    }
+    loadingTx.textContent = "Carregando " + hostOf(url) + "…";
+    setStatus("Buscando HTML via proxy…", "warn");
     showPane("loading");
     setStats("→ " + maskProxy(finalUrl));
 
-    if (useSrcdoc){
-      loadViaSrcdoc(url, finalUrl);
-    } else {
-      loadInIframe(url, finalUrl);
-    }
-  }
-
-  function loadInIframe(targetUrl, finalUrl){
-    view.setAttribute("sandbox",
-      "allow-scripts allow-forms allow-popups allow-modals allow-pointer-lock allow-presentation");
-    view.removeAttribute("srcdoc");
-    view.removeAttribute("src");
-    showPane("view");
-
-    const t0 = performance.now();
-    let settled = false;
-
-    const onLoad = () => {
-      if (settled) return;
-      settled = true;
-      view.removeEventListener("load", onLoad);
-      if (globalLoadTimer){ clearTimeout(globalLoadTimer); globalLoadTimer = null; }
-      const dt = Math.round(performance.now() - t0);
-      setStatus("Carregado — " + hostOf(targetUrl), "ok");
-      setStats(dt + " ms · iframe · " + maskProxy(finalUrl));
-      showProgress(false);
-      state.busy = false;
-    };
-    view.addEventListener("load", onLoad);
-    view.src = finalUrl;
-
-    globalLoadTimer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      view.removeEventListener("load", onLoad);
-      setStatus("Timeout — verifica o proxy em ⚙️", "err");
-      showProgress(false);
-      state.busy = false;
-    }, 25000);
+    loadViaSrcdoc(url, finalUrl);
   }
 
   async function loadViaSrcdoc(targetUrl, finalUrl){
     try {
-      setStatus("Buscando HTML via proxy…", "warn");
       const ctl = new AbortController();
       const tid = setTimeout(() => ctl.abort(), 20000);
       const res = await fetch(finalUrl, { signal: ctl.signal, mode: "cors" });
@@ -494,14 +436,12 @@
 
       html = rewriteHTML(html, targetUrl);
 
-      view.setAttribute("sandbox",
-        "allow-scripts allow-forms allow-modals allow-pointer-lock allow-presentation");
       view.removeAttribute("src");
       view.srcdoc = html;
       showPane("view");
 
       if (globalLoadTimer){ clearTimeout(globalLoadTimer); globalLoadTimer = null; }
-      setStatus("Processado — " + hostOf(targetUrl), "ok");
+      setStatus("Carregado — " + hostOf(targetUrl), "ok");
       setStats("srcdoc · " + maskProxy(finalUrl));
       showProgress(false);
       state.busy = false;
@@ -625,8 +565,11 @@
     if (e.source !== view.contentWindow) return;
     const d = e.data;
     if (d && d.__hp === 1){
-      if (d.type === "navigate" && typeof d.url === "string") navigate(d.url);
-      else if (d.type === "focus-address"){ address.focus(); address.select(); }
+      if (d.type === "navigate" && typeof d.url === "string" && d.url !== state.current){
+        navigate(d.url);
+      } else if (d.type === "focus-address"){
+        address.focus(); address.select();
+      }
     }
   });
 
