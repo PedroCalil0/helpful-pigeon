@@ -8,33 +8,18 @@ import ssl
 import sys
 from pathlib import Path
 
-# ============================================================
-# CONFIGURAÇÃO
-# ============================================================
 PORT     = 8080
-TOKEN    = "meu-segredo-super-longo"          # tem de bater com o index.html
+TOKEN    = "meu-segredo-super-longo"
 BASE_DIR = Path(__file__).parent.resolve()
 
 STRIP = {
-    "x-frame-options",
-    "content-security-policy",
-    "content-security-policy-report-only",
-    "cross-origin-opener-policy",
-    "cross-origin-embedder-policy",
-    "cross-origin-resource-policy",
-    "strict-transport-security",
-    "connection",
-    "keep-alive",
-    "proxy-authenticate",
-    "proxy-authorization",
-    "te",
-    "trailers",
-    "transfer-encoding",
-    "upgrade",
-    "content-encoding",
-    "content-length",
+    "x-frame-options", "content-security-policy",
+    "content-security-policy-report-only", "cross-origin-opener-policy",
+    "cross-origin-embedder-policy", "cross-origin-resource-policy",
+    "strict-transport-security", "connection", "keep-alive",
+    "proxy-authenticate", "proxy-authorization", "te", "trailers",
+    "transfer-encoding", "upgrade", "content-encoding", "content-length",
 }
-
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
@@ -77,6 +62,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(b"Falta parametro url")
             return
 
+        # Converte links do GitHub "blob" para "raw" (evita 302 intermédio)
+        if "github.com" in target and "/blob/" in target:
+            target = target.replace("github.com", "raw.githubusercontent.com")
+            target = target.replace("/blob/", "/")
+
         try:
             req = urllib.request.Request(
                 target,
@@ -95,12 +85,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             ctx.verify_mode    = ssl.CERT_NONE
 
             with urllib.request.urlopen(req, context=ctx, timeout=30) as resp:
+                final_url = resp.url          # ← URL depois dos redirects
+
                 self.send_response(resp.status)
                 for k, v in resp.headers.items():
                     if k.lower() in STRIP:
                         continue
                     self.send_header(k, v)
+
+                # Cabeçalho que o Helpful Pigeon usa para atualizar o <base>
+                self.send_header("X-Final-URL", final_url)
                 self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Expose-Headers", "X-Final-URL")
                 self.end_headers()
 
                 while True:
@@ -129,7 +125,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     socketserver.TCPServer.allow_reuse_address = True
-
     with socketserver.ThreadingTCPServer(("0.0.0.0", PORT), Handler) as httpd:
         print("=" * 60)
         print("  Helpful Pigeon — servidor a correr")
@@ -138,9 +133,6 @@ if __name__ == "__main__":
         print(f"  Token:   {TOKEN}")
         print(f"  Pasta:   {BASE_DIR}")
         print("=" * 60)
-        print("  Ctrl+C para parar.")
-        print()
-
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
